@@ -24,15 +24,13 @@ Thumbs.db
 .windows-build-tools
 
 # Project specific
-*.xlsm
-*.xlsx
+# (исключения для шаблонов в папке "Шаблоны НЕ ТРОГАТЬ!!!")
 Расчетные таблицы.xlsx
 Адресный перечень.xlsm
 Приложение.docx
 Приложение устранения.docx
 Отчет.docx
 Текст.docx
-Шаблон.docx
 
 # Temporary files
 *.tmp
