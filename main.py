@@ -1,4 +1,5 @@
 import shutil
+import sys
 from pathlib import Path
 from photo_analyzer import PhotoFolderAnalyzer
 from fill_rt import RTFiller
@@ -16,24 +17,46 @@ def get_int_input(prompt: str) -> int:
 
 
 def check_templates_exist(*paths: Path) -> bool:
-    for path in paths:
-        if not path.exists():
-            print(f"Ошибка: Шаблон не найден: {path}")
-            return False
+    missing = [p for p in paths if not p.exists()]
+    if missing:
+        print("❌ Ошибка: Не найдены следующие файлы шаблонов:")
+        for p in missing:
+            print(f"   - {p}")
+        return False
     return True
 
 
 def main():
-    base_path = Path(__file__).parent
+    # Получаем базовую папку (работает как для .py, так и для .exe)
+    if getattr(sys, 'frozen', False):
+        # Если запускается exe
+        base_path = Path(sys.executable).parent
+    else:
+        # Если запускается .py
+        base_path = Path(__file__).parent
+    
     photo_root = base_path / "Фото"
-
     templates_dir = base_path / "Шаблоны НЕ ТРОГАТЬ!!!"
+
+    # Проверяем наличие необходимых папок
+    if not photo_root.exists():
+        print(f"❌ Ошибка: Папка 'Фото' не найдена!")
+        print(f"   Ищу в: {photo_root}")
+        input("\nНажмите любую клавишу для выхода...")
+        return
+    
+    if not templates_dir.exists():
+        print(f"❌ Ошибка: Папка 'Шаблоны НЕ ТРОГАТЬ!!!' не найдена!")
+        print(f"   Ищу в: {templates_dir}")
+        input("\nНажмите любую клавишу для выхода...")
+        return
 
     rt_file = templates_dir / "РТ.xlsx"
     ap_file = templates_dir / "АП.xlsm"
     pril_template = templates_dir / "Шаблон.docx"
 
     if not check_templates_exist(rt_file, ap_file, pril_template):
+        input("\nНажмите любую клавишу для выхода...")
         return
 
     report_data = ReportData()
@@ -93,9 +116,17 @@ def main():
     print("✅ Приложение устранения успешно создано")
 
     pril_template_copy.unlink(missing_ok=True)
-    shutil.rmtree(templates_dir, ignore_errors=True)
 
     print("\n🎉 Все документы успешно созданы!")
+    print(f"📁 Файлы находятся в папке: {base_path}")
+    print("   - Адресный перечень.xlsm")
+    print("   - Расчетные таблицы.xlsx")
+    print("   - Приложение.docx")
+    print("   - Приложение устранения.docx")
+    
+    print("\n" + "="*50)
+    input("Нажмите любую клавишу для выхода...")
+    print("="*50)
 
 
 if __name__ == "__main__":
