@@ -1,0 +1,45 @@
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+.windows-build-tools
+
+# Project specific
+*.xlsm
+*.xlsx
+Расчетные таблицы.xlsx
+Адресный перечень.xlsm
+Приложение.docx
+Приложение устранения.docx
+Отчет.docx
+Текст.docx
+Шаблон.docx
+
+# Temporary files
+*.tmp
+*.log
+*.bak
+
+# Distribution
+build/
+dist/
+*.egg-info/
