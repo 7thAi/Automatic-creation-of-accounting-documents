@@ -190,9 +190,9 @@ def main():
     for file in output_files:
         print(f"   - {file}")
     
-    print("\n" + "="*50)
-    input("Нажмите любую клавишу для выхода...")
-    print("="*50)
+    print("\n" + "="*60)
+    input("✓ Работа завершена. Нажмите любую клавишу для выхода...")
+    print("="*60)
 
 
 if __name__ == "__main__":
