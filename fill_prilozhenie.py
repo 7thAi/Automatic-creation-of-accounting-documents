@@ -9,8 +9,6 @@ from docx.shared import Cm, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
-from PIL import Image
-from io import BytesIO
 
 
 class PrilozhenieFiller:
@@ -418,23 +416,16 @@ class PrilozhenieFiller:
             path: Путь к файлу изображения.
         """
         try:
-            with Image.open(path) as img:
-                resized_img = self._resize_image(img, 250)
-                
-                img_bytes = BytesIO()
-                resized_img.save(img_bytes, format='PNG')
-                img_bytes.seek(0)
-
-                cell = table.cell(row, col)
-                # Очищаем все параграфы в ячейке
-                for p in cell.paragraphs:
-                    p.clear()
-                
-                # Добавляем фото в первый параграф
-                p = cell.paragraphs[0]
-                run = p.add_run()
-                run.add_picture(img_bytes, width=self.PHOTO_WIDTH, height=self.PHOTO_HEIGHT)
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            cell = table.cell(row, col)
+            # Очищаем все параграфы в ячейке
+            for p in cell.paragraphs:
+                p.clear()
+            
+            # Добавляем фото напрямую без масштабирования
+            p = cell.paragraphs[0]
+            run = p.add_run()
+            run.add_picture(str(path), width=self.PHOTO_WIDTH, height=self.PHOTO_HEIGHT)
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         except Exception as e:
             print(f"  Ошибка при вставке фото {path}: {e}")
 
@@ -496,30 +487,3 @@ class PrilozhenieFiller:
         name = re.sub(r"\s*\(\d+\)$", "", path.stem)
         return name.replace("_", "/")
 
-    def _resize_image(self, img: Image.Image, target_dpi: int) -> Image.Image:
-        """
-        Изменяет размер изображения для целевого DPI.
-        
-        Args:
-            img: Исходное изображение.
-            target_dpi: Целевое разрешение DPI.
-            
-        Returns:
-            Изменённое изображение.
-        """
-        original_dpi = img.info.get("dpi", (72, 72))[0]
-        x_inch = img.width / original_dpi
-        y_inch = img.height / original_dpi
-        new_width = int(x_inch * target_dpi)
-        new_height = int(y_inch * target_dpi)
-        
-        # Используем Image.Resampling.LANCZOS для совместимости с Pillow 10+
-        try:
-            resampling = Image.Resampling.LANCZOS
-        except AttributeError:
-            # Для старых версий Pillow
-            resampling = Image.LANCZOS
-            
-        resized = img.resize((new_width, new_height), resampling)
-        resized.info['dpi'] = (target_dpi, target_dpi)
-        return resized
