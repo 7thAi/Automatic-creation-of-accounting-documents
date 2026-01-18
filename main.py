@@ -1,14 +1,33 @@
 import shutil
 import sys
+import logging
 from pathlib import Path
+from typing import Dict, Optional, Tuple
 from photo_analyzer import PhotoFolderAnalyzer
 from fill_rt import RTFiller
 from fill_ap import APFiller
 from fill_prilozhenie import PrilozhenieFiller
 from report_data import ReportData
 
+logger = logging.getLogger(__name__)
+
+
+class ProjectConfig:
+    """Конфигурация проекта с путями и константами."""
+    TEMPLATES_DIR_NAME = "Шаблоны НЕ ТРОГАТЬ!!!"
+    PHOTOS_DIR_NAME = "Фото"
+    TEMPLATE_FILES = {"rt": "РТ.xlsx", "ap": "АП.xlsm", "prilozhenie": "Шаблон.docx"}
+    OUTPUT_FILES = {
+        "rt_copy": "Расчетные таблицы.xlsx",
+        "ap_copy": "Адресный перечень.xlsm",
+        "prilozhenie_template": "Шаблон.docx",
+        "prilozhenie": "Приложение.docx",
+        "prilozhenie_ustraneniya": "Приложение устранения.docx"
+    }
+
 
 def get_int_input(prompt: str) -> int:
+    """Получает целое число от пользователя с валидацией."""
     while True:
         try:
             return int(input(prompt))
@@ -16,113 +35,160 @@ def get_int_input(prompt: str) -> int:
             print("Введите число!")
 
 
-def check_templates_exist(*paths: Path) -> bool:
+def check_paths_exist(*paths: Path) -> bool:
+    """Проверяет существование путей и выводит список отсутствующих."""
     missing = [p for p in paths if not p.exists()]
     if missing:
-        print("❌ Ошибка: Не найдены следующие файлы шаблонов:")
+        print("❌ Ошибка: Не найдены следующие файлы:")
         for p in missing:
             print(f"   - {p}")
         return False
     return True
 
 
-def main():
-    # Получаем базовую папку (работает как для .py, так и для .exe)
+def get_base_path() -> Path:
+    """Получает базовую папку приложения (работает как для .py, так и для .exe)."""
     if getattr(sys, 'frozen', False):
-        # Если запускается exe
-        base_path = Path(sys.executable).parent
-    else:
-        # Если запускается .py
-        base_path = Path(__file__).parent
-    
-    photo_root = base_path / "Фото"
-    templates_dir = base_path / "Шаблоны НЕ ТРОГАТЬ!!!"
+        return Path(sys.executable).parent
+    return Path(__file__).parent
 
-    # Проверяем наличие необходимых папок
+
+def init_project_paths(base_path: Path) -> Optional[Tuple[Path, Path, Dict[str, Path]]]:
+    """Инициализирует и проверяет пути проекта.
+    
+    Returns:
+        Кортеж (photo_root, templates_dir, template_paths) или None при ошибке.
+    """
+    photo_root = base_path / ProjectConfig.PHOTOS_DIR_NAME
+    templates_dir = base_path / ProjectConfig.TEMPLATES_DIR_NAME
+    
     if not photo_root.exists():
-        print(f"❌ Ошибка: Папка 'Фото' не найдена!")
+        print(f"❌ Ошибка: Папка '{ProjectConfig.PHOTOS_DIR_NAME}' не найдена!")
         print(f"   Ищу в: {photo_root}")
-        input("\nНажмите любую клавишу для выхода...")
-        return
+        return None
     
     if not templates_dir.exists():
-        print(f"❌ Ошибка: Папка 'Шаблоны НЕ ТРОГАТЬ!!!' не найдена!")
+        print(f"❌ Ошибка: Папка '{ProjectConfig.TEMPLATES_DIR_NAME}' не найдена!")
         print(f"   Ищу в: {templates_dir}")
+        return None
+    
+    template_paths = {
+        key: templates_dir / ProjectConfig.TEMPLATE_FILES[key]
+        for key in ProjectConfig.TEMPLATE_FILES
+    }
+    
+    if not check_paths_exist(*template_paths.values()):
+        return None
+    
+    return photo_root, templates_dir, template_paths
+
+
+def collect_user_counts() -> Dict[str, int]:
+    """Собирает от пользователя количество объектов по категориям."""
+    categories = [
+        ("ДТ", "Количество ДТ: "),
+        ("ДТ_пройденные", "Количество пройденных ДТ: "),
+        ("МКД", "Количество МКД: "),
+        ("МКД_пройденные", "Количество пройденных МКД: "),
+        ("ОДХ", "Количество ОДХ: "),
+        ("ОДХ_пройденные", "Количество пройденных ОДХ: "),
+        ("ОО", "Количество ОО: "),
+        ("ОО_пройденные", "Количество пройденных ОО: ")
+    ]
+    return {key: get_int_input(prompt) for key, prompt in categories}
+
+
+def copy_templates(base_path: Path, template_paths: Dict[str, Path]) -> Dict[str, Path]:
+    """Копирует файлы шаблонов в рабочую директорию.
+    
+    Returns:
+        Словарь с путями скопированных файлов.
+    """
+    output_paths = {}
+    template_mapping = [
+        ("rt", "rt_copy"),
+        ("ap", "ap_copy"),
+        ("prilozhenie", "prilozhenie_template")
+    ]
+    
+    for src_key, dst_key in template_mapping:
+        src_path = template_paths[src_key]
+        dst_path = base_path / ProjectConfig.OUTPUT_FILES[dst_key]
+        shutil.copy2(src_path, dst_path)
+        output_paths[dst_key] = dst_path
+        logger.debug(f"Скопирован: {src_path.name} -> {dst_path.name}")
+    
+    return output_paths
+
+
+def main():
+    base_path = get_base_path()
+    
+    # Инициализируем пути
+    result = init_project_paths(base_path)
+    if result is None:
         input("\nНажмите любую клавишу для выхода...")
         return
-
-    rt_file = templates_dir / "РТ.xlsx"
-    ap_file = templates_dir / "АП.xlsm"
-    pril_template = templates_dir / "Шаблон.docx"
-
-    if not check_templates_exist(rt_file, ap_file, pril_template):
-        input("\nНажмите любую клавишу для выхода...")
-        return
-
+    
+    photo_root, templates_dir, template_paths = result
+    
+    # Получаем данные ГБУ
     report_data = ReportData()
     gbu_name, app_number = report_data.run()
-
-    rt_copy = base_path / "Расчетные таблицы.xlsx"
-    ap_copy = base_path / "Адресный перечень.xlsm"
-    pril_template_copy = base_path / "Шаблон.docx"
-
-    shutil.copy2(rt_file, rt_copy)
-    shutil.copy2(ap_file, ap_copy)
-    shutil.copy2(pril_template, pril_template_copy)
-
-    analyzer = PhotoFolderAnalyzer()
-    ap_filler = APFiller()
-
-    counts = {
-        "ДТ": get_int_input("Количество ДТ: "),
-        "ДТ_пройденные": get_int_input("Количество пройденных ДТ: "),
-        "МКД": get_int_input("Количество МКД: "),
-        "МКД_пройденные": get_int_input("Количество пройденных МКД: "),
-        "ОДХ": get_int_input("Количество ОДХ: "),
-        "ОДХ_пройденные": get_int_input("Количество пройденных ОДХ: "),
-        "ОО": get_int_input("Количество ОО: "),
-        "ОО_пройденные": get_int_input("Количество пройденных ОО: ")
-    }
-
+    
+    # Копируем шаблоны
+    output_paths = copy_templates(base_path, template_paths)
+    
+    # Получаем количества от пользователя
     print()
-    ap_filler.fill_counts(ap_copy, counts)
-    ap_filler.fill_ap(ap_copy, photo_root)
+    counts = collect_user_counts()
+    
+    # Заполняем адресный перечень
+    print()
+    ap_filler = APFiller()
+    ap_filler.fill_counts(output_paths["ap_copy"], counts)
+    ap_filler.fill_ap(output_paths["ap_copy"], photo_root)
     print("✅ Данные для адресного перечня обработаны")
-
+    
+    # Заполняем расчетные таблицы
+    analyzer = PhotoFolderAnalyzer()
     rt_filler = RTFiller(analyzer)
-    rt_filler.fill_rt(rt_copy, photo_root, ap_copy, counts)
+    rt_filler.fill_rt(output_paths["rt_copy"], photo_root, output_paths["ap_copy"], counts)
     print("✅ Данные для расчетных таблиц обработаны")
-
+    
+    # Создаем приложения
     filler = PrilozhenieFiller()
-
+    
     print("📄 Создание приложения...")
     filler.fill_prilozhenie(
-        pril_template_copy,
+        output_paths["prilozhenie_template"],
         photo_root,
-        base_path / "Приложение.docx",
+        base_path / ProjectConfig.OUTPUT_FILES["prilozhenie"],
         gbu_name=gbu_name,
         app_number=app_number
     )
     print("✅ Приложение успешно создано")
-
+    
     print("📄 Создание приложения устранения...")
     filler.fill_prilozhenie_ustraneniya(
-        pril_template_copy,
+        output_paths["prilozhenie_template"],
         photo_root,
-        base_path / "Приложение устранения.docx",
+        base_path / ProjectConfig.OUTPUT_FILES["prilozhenie_ustraneniya"],
         gbu_name=gbu_name,
         app_number=app_number
     )
     print("✅ Приложение устранения успешно создано")
-
-    pril_template_copy.unlink(missing_ok=True)
-
+    
+    # Удаляем временный файл шаблона
+    output_paths["prilozhenie_template"].unlink(missing_ok=True)
+    
+    # Вывод результатов
     print("\n🎉 Все документы успешно созданы!")
     print(f"📁 Файлы находятся в папке: {base_path}")
-    print("   - Адресный перечень.xlsm")
-    print("   - Расчетные таблицы.xlsx")
-    print("   - Приложение.docx")
-    print("   - Приложение устранения.docx")
+    output_files = [ProjectConfig.OUTPUT_FILES[key] for key in 
+                    ["ap_copy", "rt_copy", "prilozhenie", "prilozhenie_ustraneniya"]]
+    for file in output_files:
+        print(f"   - {file}")
     
     print("\n" + "="*50)
     input("Нажмите любую клавишу для выхода...")
@@ -130,4 +196,13 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    logging.basicConfig(
+        level=logging.WARNING,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    try:
+        main()
+    except Exception as e:
+        logger.error(f"Критическая ошибка: {e}", exc_info=True)
+        print(f"\n❌ Критическая ошибка: {e}")
+        input("\nНажмите любую клавишу для выхода...")

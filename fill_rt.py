@@ -104,8 +104,7 @@ class RTFiller:
         self.analyzer = analyzer
 
     def find_folder_recursive(self, root: Path, target_name: str) -> Optional[Path]:
-        """
-        Ищет папку с точным именем рекурсивно.
+        """Ищет папку с точным именем рекурсивно.
         
         Args:
             root: Корневая директория для поиска.
@@ -120,8 +119,7 @@ class RTFiller:
         return None
 
     def _fill_cell_with_photo_count(self, sheet, folder_name: str, cell: str, folder_path: Path) -> None:
-        """
-        Подсчитывает фото в папке и записывает количество в ячейку.
+        """Подсчитывает фото в папке и записывает количество в ячейку.
         
         Args:
             sheet: Лист Excel.
@@ -133,9 +131,8 @@ class RTFiller:
         sheet.range(cell).value = count
         logger.debug(f"Записано {count} фото из {folder_name} в ячейку {cell}")
 
-    def fill_rt(self, rt_path: Path, photo_root: Path, ap_path: Path, counts: Dict[str, int] = None) -> None:
-        """
-        Заполняет РТ фото, суммарные значения из АП и количества объектов.
+    def fill_rt(self, rt_path: Path, photo_root: Path, ap_path: Path, counts: Optional[Dict[str, int]] = None) -> None:
+        """Заполняет РТ фото, суммарные значения из АП и количества объектов.
         
         Args:
             rt_path: Путь к файлу РТ.
@@ -154,6 +151,8 @@ class RTFiller:
 
             # Кэшируем имена листов для эффективности
             rt_sheet_names = {s.name for s in wb_rt.sheets}
+            
+            # Заполняем количества объектов
             if counts:
                 for key, value in counts.items():
                     if key in self.COUNTS_MAP:

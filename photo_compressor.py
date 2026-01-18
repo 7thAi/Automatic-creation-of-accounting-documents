@@ -15,9 +15,8 @@ class PhotoCompressor:
     EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff'}
     DEFAULT_DPI = 250
 
-    def __init__(self, target_dpi: int = 250):
-        """
-        Инициализация компрессора.
+    def __init__(self, target_dpi: int = DEFAULT_DPI):
+        """Инициализация компрессора.
         
         Args:
             target_dpi: Целевое разрешение DPI.
@@ -25,8 +24,7 @@ class PhotoCompressor:
         self.target_dpi = target_dpi
 
     def compress_image(self, input_path: Path, output_path: Optional[Path] = None) -> Path:
-        """
-        Сжимает фото до target_dpi.
+        """Сжимает фото до target_dpi.
         
         Args:
             input_path: Путь к исходному изображению.
@@ -62,8 +60,7 @@ class PhotoCompressor:
         return output_path
 
     def compress_folder(self, folder: Path, inplace: bool = True) -> List[Path]:
-        """
-        Сжимает все изображения в папке и подпапках.
+        """Сжимает все изображения в папке и подпапках.
         
         Args:
             folder: Путь к папке с изображениями.
@@ -77,8 +74,8 @@ class PhotoCompressor:
             return []
             
         compressed_files = []
-        for img_path in folder.rglob("*"):
-            if img_path.suffix.lower() in self.EXTENSIONS:
+        for img_path in sorted(folder.rglob("*")):
+            if img_path.suffix.lower() in self.EXTENSIONS and img_path.is_file():
                 try:
                     out_path = img_path if inplace else folder / f"compressed_{img_path.name}"
                     self.compress_image(img_path, out_path)

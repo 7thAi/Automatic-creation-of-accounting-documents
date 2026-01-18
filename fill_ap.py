@@ -37,8 +37,7 @@ class APFiller:
     }
 
     def clean_name(self, name: str) -> str:
-        """
-        Очищает имя файла от номера в скобках и заменяет подчёркивания на слэши.
+        """Очищает имя файла от номера в скобках и заменяет подчёркивания на слэши.
         
         Args:
             name: Исходное имя файла.
@@ -46,14 +45,11 @@ class APFiller:
         Returns:
             Очищенное имя.
         """
-        # Удаляем расширение файла
         name_without_ext = Path(name).stem
-        # Удаляем цифры в скобочках и заменяем подчеркивания на слэши
         return re.sub(r"\s*\(\d+\)$", "", name_without_ext).replace("_", "/").strip()
 
-    def get_all_files_with_subfolders(self, folder_path: Path) -> List[Dict[str, str]]:
-        """
-        Получает список всех файлов изображений с информацией о подпапках.
+    def get_all_files_with_subfolders(self, folder_path: Path) -> list:
+        """Получает список всех файлов изображений с информацией о подпапках.
         
         Args:
             folder_path: Путь к папке для сканирования.
@@ -70,18 +66,17 @@ class APFiller:
                 "filename": item.name,
                 "subfolder": item.parent.name if item.parent != folder_path else folder_path.name
             }
-            for item in folder_path.rglob("*")
+            for item in sorted(folder_path.rglob("*"))
             if item.is_file() and item.suffix.lower() in self.EXTENSIONS
         ]
-        return sorted(files_info, key=lambda x: x["filename"])
+        return files_info
 
     def _style_cell(self, cell, bold: bool = False) -> None:
-        """
-        Применяет стиль к ячейке.
+        """Применяет стиль к ячейке.
         
         Args:
             cell: Ячейка Excel для стилизации.
-            bold: Использовать жирный шрифт (по умолчанию False).
+            bold: Использовать жирный шрифт.
         """
         thin = Side(border_style="thin", color="000000")
         cell.font = Font(name="Times New Roman", size=14, bold=bold)
@@ -89,8 +84,7 @@ class APFiller:
         cell.border = Border(top=thin, bottom=thin, left=thin, right=thin)
 
     def fill_counts(self, excel_path: Path, counts: Dict[str, int]) -> None:
-        """
-        Заполняет ячейки с количеством объектов.
+        """Заполняет ячейки с количеством объектов.
         
         Args:
             excel_path: Путь к файлу Excel.
@@ -117,8 +111,7 @@ class APFiller:
                 wb.close()
 
     def fill_ap(self, excel_path: Path, photo_root: Path) -> None:
-        """
-        Заполняет АП данными о фотографиях.
+        """Заполняет АП данными о фотографиях.
         
         Args:
             excel_path: Путь к файлу Excel.

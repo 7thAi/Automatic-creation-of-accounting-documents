@@ -3,7 +3,7 @@
 """
 import logging
 from pathlib import Path
-from typing import Set
+from typing import List
 
 logger = logging.getLogger(__name__)
 
@@ -11,11 +11,10 @@ logger = logging.getLogger(__name__)
 class PhotoFolderAnalyzer:
     """Анализирует папку и подсчитывает количество фотографий."""
 
-    EXTENSIONS: Set[str] = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff'}
+    EXTENSIONS: set = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff'}
 
     def count_photos_in_folder(self, folder_path: Path) -> int:
-        """
-        Возвращает количество фото в папке и подпапках.
+        """Возвращает количество фото в папке и подпапках.
         
         Args:
             folder_path: Путь к папке для анализа.
@@ -34,9 +33,8 @@ class PhotoFolderAnalyzer:
         logger.debug(f"Найдено {count} фото в {folder_path}")
         return count
 
-    def get_photo_list(self, folder_path: Path) -> list:
-        """
-        Возвращает список путей к фотографиям в папке.
+    def get_photo_list(self, folder_path: Path) -> List[Path]:
+        """Возвращает список путей к фотографиям в папке.
         
         Args:
             folder_path: Путь к папке для анализа.
@@ -47,7 +45,7 @@ class PhotoFolderAnalyzer:
         if not folder_path.exists():
             return []
             
-        return [
+        return sorted([
             f for f in folder_path.rglob("*")
             if f.is_file() and f.suffix.lower() in self.EXTENSIONS
-        ]
+        ])
