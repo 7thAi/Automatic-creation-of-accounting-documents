@@ -46,7 +46,10 @@ class APFiller:
         Returns:
             Очищенное имя.
         """
-        return re.sub(r"\s*\(\d+\)$", "", name).replace("_", "/").strip()
+        # Удаляем расширение файла
+        name_without_ext = Path(name).stem
+        # Удаляем цифры в скобочках и заменяем подчеркивания на слэши
+        return re.sub(r"\s*\(\d+\)$", "", name_without_ext).replace("_", "/").strip()
 
     def get_all_files_with_subfolders(self, folder_path: Path) -> List[Dict[str, str]]:
         """

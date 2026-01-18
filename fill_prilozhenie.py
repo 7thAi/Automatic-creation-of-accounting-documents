@@ -7,6 +7,8 @@ from typing import List, Dict, Optional
 from docx import Document
 from docx.shared import Cm, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
 from PIL import Image
 from io import BytesIO
 
@@ -16,10 +18,18 @@ class PrilozhenieFiller:
 
     EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff'}
 
-    PHOTO_WIDTH = Cm(12.98)
+    PHOTO_WIDTH = Cm(12.36)
     PHOTO_HEIGHT = Cm(6.49)
     FONT_NAME = "Times New Roman"
     FONT_SIZE = Pt(14)
+    CELL_WIDTH = Cm(12)
+
+    HEADERS_MAP = {
+        "1. ДТ": "Фотофиксация нарушений, установленных при обследовании содержания и благоустройства дворовых территорий и внутриквартальных проездов ГБУ",
+        "2. МКД": "Фотофиксация нарушений, установленных при внешнем обследовании санитарного и технического состояния многоквартирных домов, находящихся в управлении ГБУ",
+        "3. ОДХ": "Фотофиксация нарушений, установленных при обследовании содержания объектов дорожного хозяйства ГБУ",
+        "4. ОО": "Фотофиксация нарушений, установленных при обследовании содержания и благоустройства объектов озеленения ГБУ"
+    }
 
     VIOLATION_MAP = {
         "1. Проезд АБП": "локальные разрушения на проездах",
@@ -84,70 +94,83 @@ class PrilozhenieFiller:
         Returns:
             Короткое название в кавычках.
         """
-        # Ищем текст в кавычках «...»
         match = re.search(r'«(.+?)»', gbu_name)
         if match:
             return f"«{match.group(1)}»"
         return gbu_name
 
-    def _update_document_headers(self, doc, gbu_name: str, app_number: int) -> None:
+    def _create_title_page(self, doc: Document, gbu_name: str, app_number: int) -> None:
         """
-        Обновляет заголовки документа: вставляет название ГБУ и номер приложения.
+        Создает титульную страницу с номером приложения.
         
         Args:
             doc: Документ Word.
             gbu_name: Название ГБУ.
             app_number: Номер приложения.
         """
-        gbu_short = self._extract_gbu_short_name(gbu_name)
+        # Удаляем все пустые параграфы в начале документа
+        while doc.paragraphs and not doc.paragraphs[0].text.strip():
+            p = doc.paragraphs[0]._element
+            p.getparent().remove(p)
         
-        # Проходим по всем параграфам документа
-        for para in doc.paragraphs:
-            text = para.text
-            
-            # Заменяем "Приложение № ????" на "Приложение № {номер}"
-            if "Приложение №" in text and "????" in text:
-                for run in para.runs:
-                    if "????" in run.text:
-                        run.text = run.text.replace("????", str(app_number))
-            
-            # Ищем строки с "ГБУ" и заменяем название ГБУ
-            if "ГБУ" in text:
-                # Проходим по всем runs в параграфе и заменяем текст
-                full_text = "".join(run.text for run in para.runs)
-                
-                # Если в параграфе есть шаблонное название ГБУ (с ??? или старым названием)
-                if "???" in full_text or ("ГБУ" in full_text and "»" in full_text):
-                    # Очищаем все runs в параграфе
-                    for run in para.runs:
-                        run.text = ""
-                    
-                    # Вставляем новый текст с правильным названием ГБУ
-                    # Восстанавливаем структуру строки
-                    if "Фотофиксация" in full_text or "нарушений" in full_text:
-                        # Это заголовок вроде "Фотофиксация нарушений... ГБУ..."
-                        new_text = full_text
-                        # Заменяем все варианты названия ГБУ на правильное
-                        new_text = re.sub(
-                            r'ГБУ «[^»]*»',
-                            f'ГБУ {gbu_short}',
-                            new_text
-                        )
-                        new_text = re.sub(
-                            r'ГБУ \?+',
-                            f'ГБУ {gbu_short}',
-                            new_text
-                        )
-                        
-                        # Вставляем новый текст в первый run
-                        para.runs[0].text = new_text
-                    
-                    # Применяем форматирование
-                    for run in para.runs:
-                        if run.text:  # Только если есть текст
-                            run.font.name = self.FONT_NAME
-                            run.font.size = self.FONT_SIZE
-                            run.bold = True
+        # Номер приложения справа
+        p_number = doc.add_paragraph()
+        p_number.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        run = p_number.add_run(f"Приложение № {app_number}")
+        run.font.name = self.FONT_NAME
+        run.font.size = self.FONT_SIZE
+        run.bold = True
+        p_number.paragraph_format.line_spacing = 1.5
+
+    def _create_section_header(self, doc: Document, folder: str, gbu_name: str) -> None:
+        """
+        Создает заголовок для каждой секции (ДТ, МКД, ОДХ, ОО).
+        
+        Args:
+            doc: Документ Word.
+            folder: Папка (1. ДТ, 2. МКД, и т.д.).
+            gbu_name: Название ГБУ.
+        """
+        gbu_short = self._extract_gbu_short_name(gbu_name)
+        header_template = self.HEADERS_MAP.get(folder, "")
+        
+        if header_template:
+            header_text = header_template + " " + gbu_short
+            p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run = p.add_run(header_text)
+            run.font.name = self.FONT_NAME
+            run.font.size = self.FONT_SIZE
+            run.bold = True
+            p.paragraph_format.line_spacing = 1.5
+
+    def _create_table_for_photos(self, doc: Document, photo_count: int, left_only: bool = False) -> None:
+        """
+        Создает таблицу для фотографий с нужным количеством строк.
+        
+        Args:
+            doc: Документ Word.
+            photo_count: Количество фотографий.
+            left_only: Если True, каждое фото занимает отдельную строку (только левая колонка),
+                      если False, два фото в одной строке, подписи во второй строке.
+        """
+        if left_only:
+            # Для приложения устранения: каждое фото + подпись = 2 строки на фото
+            rows = photo_count * 2
+        else:
+            # Для обычного приложения: два фото в одной строке, две подписи во второй
+            rows = (photo_count + 1) // 2 * 2  # Округляем вверх для четного количества строк
+        
+        table = doc.add_table(rows=rows, cols=2)
+        table.style = 'Table Grid'
+        
+        # Устанавливаем интервал строк = 1
+        for row in table.rows:
+            for cell in row.cells:
+                cell.width = self.CELL_WIDTH
+                # Устанавливаем интервал в параграфах ячейки
+                for paragraph in cell.paragraphs:
+                    paragraph.paragraph_format.line_spacing = 1
 
     def fill_prilozhenie(self, template_path: Path, photo_root: Path, save_path: Path,
                          gbu_name: str = None, app_number: int = None,
@@ -156,20 +179,59 @@ class PrilozhenieFiller:
         Заполняет приложение фотографиями (обе колонки).
         
         Args:
-            template_path: Путь к шаблону документа.
+            template_path: Путь к шаблону документа (пустой файл).
             photo_root: Корневая папка с фотографиями.
             save_path: Путь для сохранения результата.
             gbu_name: Название ГБУ для вставки в заголовки.
             app_number: Номер приложения.
             show_progress: Показывать прогресс выполнения.
         """
-        doc = Document(str(template_path))
+        # Открываем шаблон
+        if template_path and template_path.exists():
+            doc = Document(str(template_path))
+        else:
+            doc = Document()
         
-        # Обновляем заголовки если переданы данные
         if gbu_name and app_number:
-            self._update_document_headers(doc, gbu_name, app_number)
+            self._create_title_page(doc, gbu_name, app_number)
         
-        self._fill_all_tables(doc, photo_root, left_only=False, show_progress=show_progress)
+        folders = ["1. ДТ", "2. МКД", "3. ОДХ", "4. ОО"]
+        first_section = True
+        
+        for folder in folders:
+            folder_path = photo_root / folder
+            
+            if not folder_path.exists():
+                if show_progress:
+                    print(f"  Папка не существует: {folder_path}")
+                continue
+            
+            photos = self._collect_photos(folder_path)
+            
+            if not photos:
+                if show_progress:
+                    print(f"  {folder}: нет фотографий")
+                continue
+            
+            # Добавляем разрыв страницы перед каждой секцией, кроме первой
+            if not first_section:
+                doc.add_page_break()
+            first_section = False
+            
+            # Добавляем заголовок секции
+            if gbu_name:
+                self._create_section_header(doc, folder, gbu_name)
+            
+            # Добавляем таблицу
+            self._create_table_for_photos(doc, len(photos), left_only=False)
+            table = doc.tables[-1]
+            
+            # Заполняем таблицу
+            self._fill_table(table, photos, left_only=False)
+            
+            if show_progress:
+                print(f"  {folder}: {len(photos)} фото")
+        
         doc.save(str(save_path))
         if show_progress:
             print(f"  {save_path.name}: 100% заполнено")
@@ -181,58 +243,64 @@ class PrilozhenieFiller:
         Заполняет приложение устранения (только левая колонка).
         
         Args:
-            template_path: Путь к шаблону документа.
+            template_path: Путь к шаблону документа (пустой файл).
             photo_root: Корневая папка с фотографиями.
             save_path: Путь для сохранения результата.
             gbu_name: Название ГБУ для вставки в заголовки.
             app_number: Номер приложения.
             show_progress: Показывать прогресс выполнения.
         """
-        doc = Document(str(template_path))
+        # Открываем шаблон
+        if template_path and template_path.exists():
+            doc = Document(str(template_path))
+        else:
+            doc = Document()
         
-        # Обновляем заголовки если переданы данные
         if gbu_name and app_number:
-            self._update_document_headers(doc, gbu_name, app_number)
+            self._create_title_page(doc, gbu_name, app_number)
         
-        self._fill_all_tables(doc, photo_root, left_only=True, show_progress=show_progress)
-        doc.save(str(save_path))
-        if show_progress:
-            print(f"  {save_path.name}: 100% заполнено")
-
-    def _fill_all_tables(self, doc, photo_root: Path, left_only: bool = False, 
-                         show_progress: bool = False) -> None:
-        """
-        Заполняет все таблицы в документе.
-        
-        Args:
-            doc: Документ Word.
-            photo_root: Корневая папка с фотографиями.
-            left_only: Заполнять только левую колонку.
-            show_progress: Показывать прогресс выполнения.
-        """
         folders = ["1. ДТ", "2. МКД", "3. ОДХ", "4. ОО"]
-        total_folders = len(folders)
+        first_section = True
         
-        for table_index, folder in enumerate(folders):
-            if table_index >= len(doc.tables):
-                if show_progress:
-                    print(f"  Таблица {table_index} не найдена в документе")
-                continue
-                
-            table = doc.tables[table_index]
+        for folder in folders:
             folder_path = photo_root / folder
             
             if not folder_path.exists():
                 if show_progress:
                     print(f"  Папка не существует: {folder_path}")
                 continue
-                
+            
             photos = self._collect_photos(folder_path)
-            self._fill_table(table, photos, left_only)
+            
+            if not photos:
+                if show_progress:
+                    print(f"  {folder}: нет фотографий")
+                continue
+            
+            # Добавляем разрыв страницы перед каждой секцией, кроме первой
+            if not first_section:
+                doc.add_page_break()
+            first_section = False
+            
+            # Добавляем заголовок секции
+            if gbu_name:
+                self._create_section_header(doc, folder, gbu_name)
+            
+            # Добавляем таблицу
+            self._create_table_for_photos(doc, len(photos), left_only=True)
+            table = doc.tables[-1]
+            
+            # Заполняем таблицу
+            self._fill_table(table, photos, left_only=True)
             
             if show_progress:
-                progress = int((table_index + 1) / total_folders * 100)
-                print(f"  {folder}: {len(photos)} фото ({progress}%)")
+                print(f"  {folder}: {len(photos)} фото")
+        
+        doc.save(str(save_path))
+        if show_progress:
+            print(f"  {save_path.name}: 100% заполнено")
+
+
 
     def _collect_photos(self, root: Path) -> List[Dict]:
         """
@@ -255,42 +323,73 @@ class PrilozhenieFiller:
         """
         Заполняет таблицу фотографиями.
         
+        Для left_only=False (обычное приложение):
+        - Строка 0: Фото 1 | Фото 2
+        - Строка 1: Подпись 1 | Подпись 2
+        - Строка 2: Фото 3 | Фото 4
+        - Строка 3: Подпись 3 | Подпись 4
+        - И так далее...
+        
+        Для left_only=True (приложение устранения):
+        - Строка 0: Фото 1 | (пусто)
+        - Строка 1: Подпись 1 | (пусто)
+        - Строка 2: Фото 2 | (пусто)
+        - Строка 3: Подпись 2 | (пусто)
+        - И так далее...
+        
         Args:
             table: Таблица Word.
             photos: Список информации о фотографиях.
             left_only: Заполнять только левую колонку.
         """
-        # Для left_only вставляем только в левую колонку (col_idx=0)
         if left_only:
+            # Приложение устранения: каждое фото занимает 2 строки
             for photo_idx, info in enumerate(photos):
-                row_idx = photo_idx * 2  # Каждое фото занимает 2 строки (фото + подпись)
-
-                while row_idx + 1 >= len(table.rows):
-                    table.add_row()
-                    table.add_row()
-
-                # Вставляем фото и подпись только в левую колонку (col_idx=0)
+                row_idx = photo_idx * 2
+                
+                # Вставляем фото в левую колонку
                 self._insert_photo(table, row_idx, 0, info["path"])
+                
+                # Вставляем подпись в левую колонку
                 self._insert_caption(table, row_idx + 1, 0, info)
                 
-                # Очищаем правую колонку (col_idx=1)
+                # Очищаем правую колонку
                 self._clear_cell(table, row_idx, 1)
                 self._clear_cell(table, row_idx + 1, 1)
         else:
-            # Обычный режим - заполняем обе колонки
+            # Обычное приложение: два фото в одной строке, две подписи во второй
+            row_idx = 0
             photo_idx = 0
-            for info in photos:
-                col_idx = photo_idx % 2
-                row_idx = (photo_idx // 2) * 2
-
-                while row_idx + 1 >= len(table.rows):
-                    table.add_row()
-                    table.add_row()
-
-                self._insert_photo(table, row_idx, col_idx, info["path"])
-                self._insert_caption(table, row_idx + 1, col_idx, info)
-
+            
+            while photo_idx < len(photos):
+                # Строка с фотографиями
+                left_photo = photos[photo_idx]
                 photo_idx += 1
+                
+                right_photo = None
+                if photo_idx < len(photos):
+                    right_photo = photos[photo_idx]
+                    photo_idx += 1
+                
+                # Вставляем левое фото
+                self._insert_photo(table, row_idx, 0, left_photo["path"])
+                
+                # Вставляем правое фото или очищаем ячейку
+                if right_photo:
+                    self._insert_photo(table, row_idx, 1, right_photo["path"])
+                else:
+                    self._clear_cell(table, row_idx, 1)
+                
+                # Строка с подписями
+                row_idx += 1
+                self._insert_caption(table, row_idx, 0, left_photo)
+                
+                if right_photo:
+                    self._insert_caption(table, row_idx, 1, right_photo)
+                else:
+                    self._clear_cell(table, row_idx, 1)
+                
+                row_idx += 1
 
     def _clear_cell(self, table, row: int, col: int) -> None:
         """
@@ -306,7 +405,7 @@ class PrilozhenieFiller:
             for p in cell.paragraphs:
                 p.clear()
         except Exception:
-            pass  # Игнорируем ошибки очистки
+            pass
 
     def _insert_photo(self, table, row: int, col: int, path: Path) -> None:
         """
@@ -327,16 +426,21 @@ class PrilozhenieFiller:
                 img_bytes.seek(0)
 
                 cell = table.cell(row, col)
-                cell.paragraphs[0].clear()
-                run = cell.paragraphs[0].add_run()
+                # Очищаем все параграфы в ячейке
+                for p in cell.paragraphs:
+                    p.clear()
+                
+                # Добавляем фото в первый параграф
+                p = cell.paragraphs[0]
+                run = p.add_run()
                 run.add_picture(img_bytes, width=self.PHOTO_WIDTH, height=self.PHOTO_HEIGHT)
-                cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         except Exception as e:
             print(f"  Ошибка при вставке фото {path}: {e}")
 
     def _insert_caption(self, table, row: int, col: int, info: Dict) -> None:
         """
-        Вставляет подпись под фотографией.
+        Вставляет подпись под фотографией в следующий параграф той же ячейки.
         
         Args:
             table: Таблица Word.
@@ -345,33 +449,36 @@ class PrilozhenieFiller:
             info: Информация о фотографии.
         """
         cell = table.cell(row, col)
+        
+        # Удаляем все существующие параграфы в ячейке
         for p in cell.paragraphs:
-            p.clear()
+            p._element.getparent().remove(p._element)
+        
+        # Создаем новый параграф для подписи
+        p_caption = cell.add_paragraph()
+        p_caption.paragraph_format.line_spacing = 1
 
         address = self._clean_address(info["path"])
         violation = self.VIOLATION_MAP.get(info["subfolder"], "неизвестный тип нарушения").strip()
 
-        p = cell.paragraphs[0]
-        p.paragraph_format.line_spacing = 1.0
-
-        run1 = p.add_run("Адрес: ")
+        run1 = p_caption.add_run("Адрес: ")
         run1.font.name = self.FONT_NAME
         run1.font.size = self.FONT_SIZE
         run1.bold = True
 
-        run2 = p.add_run(address)
+        run2 = p_caption.add_run(address)
         run2.font.name = self.FONT_NAME
         run2.font.size = self.FONT_SIZE
         run2.bold = False
 
-        p.add_run().add_break()
+        p_caption.add_run("\n")
 
-        run3 = p.add_run("Нарушение: ")
+        run3 = p_caption.add_run("Нарушение: ")
         run3.font.name = self.FONT_NAME
         run3.font.size = self.FONT_SIZE
         run3.bold = True
 
-        run4 = p.add_run(violation)
+        run4 = p_caption.add_run(violation)
         run4.font.name = self.FONT_NAME
         run4.font.size = self.FONT_SIZE
         run4.bold = False
