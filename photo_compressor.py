@@ -49,9 +49,25 @@ class PhotoCompressor:
                 if img.mode in ("RGBA", "P"):
                     img = img.convert("RGB")
 
-                # Пересохраняем с нужным DPI
-                img.save(output_path, dpi=(self.target_dpi, self.target_dpi), quality=95)
-                logger.debug(f"Сжато: {input_path} -> {output_path}")
+                # Получаем текущий DPI (если доступен, иначе предполагаем 72)
+                current_dpi = img.info.get('dpi', (72, 72))
+                if isinstance(current_dpi, tuple):
+                    current_dpi_x, current_dpi_y = current_dpi
+                else:
+                    current_dpi_x = current_dpi_y = 72
+
+                # Рассчитываем новый размер в пиксели с учетом целевого DPI
+                scale_factor = current_dpi_x / self.target_dpi
+                new_width = int(img.width / scale_factor)
+                new_height = int(img.height / scale_factor)
+
+                # Изменяем размер изображения для сжатия
+                if new_width > 0 and new_height > 0 and scale_factor > 1:
+                    img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+                # Сохраняем с целевым DPI и качеством
+                img.save(output_path, dpi=(self.target_dpi, self.target_dpi), quality=85)
+                logger.debug(f"Сжато: {input_path} -> {output_path} (DPI: {current_dpi_x} -> {self.target_dpi})")
                 
         except Exception as e:
             logger.error(f"Ошибка при сжатии {input_path}: {e}")

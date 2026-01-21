@@ -121,6 +121,32 @@ def copy_templates(base_path: Path, template_paths: Dict[str, Path]) -> Dict[str
     return output_paths
 
 
+def remove_empty_folders(root_path: Path) -> int:
+    """Удаляет все пустые папки рекурсивно.
+    
+    Args:
+        root_path: Корневая папка для поиска пустых папок.
+        
+    Returns:
+        Количество удаленных папок.
+    """
+    removed_count = 0
+    
+    # Проходим по всем подпапкам в обратном порядке (от листьев к корню)
+    for item in sorted(root_path.rglob('*'), key=lambda p: len(p.parts), reverse=True):
+        if item.is_dir():
+            try:
+                # Пытаемся удалить папку - если она не пустая, исключение
+                item.rmdir()
+                removed_count += 1
+                logger.debug(f"Удалена пустая папка: {item}")
+            except OSError:
+                # Папка не пустая, игнорируем
+                pass
+    
+    return removed_count
+
+
 def main():
     base_path = get_base_path()
     
@@ -181,6 +207,9 @@ def main():
     
     # Удаляем временный файл шаблона
     output_paths["prilozhenie_template"].unlink(missing_ok=True)
+    
+    # Удаляем пустые папки из папки Фото
+    remove_empty_folders(photo_root)
     
     # Вывод результатов
     print("\n🎉 Все документы успешно созданы!")

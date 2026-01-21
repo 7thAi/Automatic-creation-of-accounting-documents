@@ -398,7 +398,10 @@ class PrilozhenieFiller:
             if self.compressed_temp_dir is None:
                 self.compressed_temp_dir = Path(tempfile.mkdtemp())
             
-            compressed_path = self.compressed_temp_dir / path.name
+            # Создаем уникальное имя, включая папку для избежания конфликтов
+            subfolder = info.get("subfolder", "unknown") if info else "unknown"
+            compressed_filename = f"{subfolder}_{path.name}"
+            compressed_path = self.compressed_temp_dir / compressed_filename
             
             # Проверяем кэш - если уже сжали, не сжимаем заново
             if not compressed_path.exists():
